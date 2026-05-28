@@ -1388,7 +1388,8 @@ class SystemScopeRequiresRootError(RuntimeError):
 
 def _user_dbus_socket_path() -> Path:
     """Return the expected per-user D-Bus socket path (regardless of existence)."""
-    xdg = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"  # windows-footgun: ok — POSIX systemd helper, never invoked on Windows
+    uid = os.getuid() if hasattr(os, "getuid") else 0
+    xdg = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{uid}"
     return Path(xdg) / "bus"
 
 

@@ -11,6 +11,8 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
+import time
 import uuid
 from typing import Optional
 
@@ -632,23 +634,45 @@ class DockerEnvironment(BaseEnvironment):
     def cleanup(self):
         """Stop and remove the container. Bind-mount dirs persist if persistent=True."""
         if self._container_id:
+            container_id = self._container_id
+            docker_exe = self._docker_exe
             try:
                 # Stop in background so cleanup doesn't block
-                stop_cmd = (
-                    f"(timeout 60 {self._docker_exe} stop {self._container_id} || "
-                    f"{self._docker_exe} rm -f {self._container_id}) >/dev/null 2>&1 &"
-                )
-                subprocess.Popen(stop_cmd, shell=True)
+                def _stop_container():
+                    try:
+                        result = subprocess.run(
+                            [docker_exe, "stop", container_id],
+                            capture_output=True,
+                            timeout=60,
+                        )
+                        if result.returncode != 0:
+                            subprocess.run(
+                                [docker_exe, "rm", "-f", container_id],
+                                capture_output=True,
+                                timeout=10,
+                            )
+                    except Exception:
+                        pass
+
+                threading.Thread(target=_stop_container, daemon=True).start()
             except Exception as e:
                 logger.warning("Failed to stop container %s: %s", self._container_id, e)
 
             if not self._persistent:
                 # Also schedule removal (stop only leaves it as stopped)
                 try:
-                    subprocess.Popen(
-                        f"sleep 3 && {self._docker_exe} rm -f {self._container_id} >/dev/null 2>&1 &",
-                        shell=True,
-                    )
+                    def _remove_container():
+                        time.sleep(3)
+                        try:
+                            subprocess.run(
+                                [docker_exe, "rm", "-f", container_id],
+                                capture_output=True,
+                                timeout=10,
+                            )
+                        except Exception:
+                            pass
+
+                    threading.Thread(target=_remove_container, daemon=True).start()
                 except Exception:
                     pass
             self._container_id = None

@@ -36,6 +36,7 @@ import platform
 import shlex
 import signal
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -510,7 +511,7 @@ class ProcessRegistry:
                     return temp_dir.rstrip("/") or "/"
             except Exception as exc:
                 logger.debug("Could not resolve environment temp dir: %s", exc)
-        return "/tmp"
+        return tempfile.gettempdir()
 
     def spawn_local(
         self,

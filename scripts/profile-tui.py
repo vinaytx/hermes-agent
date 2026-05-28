@@ -26,11 +26,19 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
+
+if sys.platform == "win32":
+    sys.exit(
+        "profile-tui.py requires a Unix PTY and cannot run on Windows. "
+        "Run this script on Linux or macOS."
+    )
+
 import pty
 import select
 import signal
 import sqlite3
-import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -507,17 +515,17 @@ def main() -> int:
     metrics = key_metrics(data)
 
     if args.save:
-        path = Path(f"/tmp/perf-{args.save}.json")
+        path = Path(tempfile.gettempdir()) / f"perf-{args.save}.json"
         path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
         print(f"\n• saved: {path}")
 
     if args.compare:
-        path = Path(f"/tmp/perf-{args.compare}.json")
+        path = Path(tempfile.gettempdir()) / f"perf-{args.compare}.json"
         if not path.exists():
             print(f"\n⚠ no baseline at {path} — run with --save {args.compare} first")
         else:
             before = json.loads(path.read_text())
-            print(f"\n═══ A/B diff vs /tmp/perf-{args.compare}.json ═══")
+            print(f"\n═══ A/B diff vs {path} ═══")
             print(format_diff(before, metrics))
 
     if not data["react"] and not data["frame"]:

@@ -1258,6 +1258,9 @@ def _ensure_tui_node() -> None:
     if os.environ.get("HERMES_SKIP_NODE_BOOTSTRAP"):
         return
 
+    if sys.platform == "win32":
+        return  # node-bootstrap.sh is a bash script and cannot run on Windows
+
     helper = PROJECT_ROOT / "scripts" / "lib" / "node-bootstrap.sh"
     if not helper.is_file():
         return
