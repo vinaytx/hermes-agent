@@ -1173,6 +1173,18 @@ def execute_code(
         # passed through — without those, the child can't create a socket
         # or spawn a subprocess.  See ``_scrub_child_env`` for the rules.
         child_env = _scrub_child_env(os.environ)
+        # Ensure the directory containing sys.executable (and sibling
+        # console-script entry points like hermes.exe / hermes) is on PATH
+        # in the child environment.  The scrubber passes PATH through from
+        # os.environ, but on Windows that may not include the virtualenv's
+        # Scripts/ dir if the user launched hermes via ./hermes rather than
+        # an activated shell.  Prepending the interpreter dir is harmless on
+        # POSIX and fixes "hermes: command not found" inside sandboxed code.
+        _py_bin_dir = os.path.dirname(os.path.abspath(sys.executable))
+        _child_path = child_env.get("PATH", "")
+        _child_path_parts = _child_path.split(os.pathsep) if _child_path else []
+        if _py_bin_dir not in _child_path_parts:
+            child_env["PATH"] = os.pathsep.join([_py_bin_dir] + _child_path_parts)
         child_env["HERMES_RPC_SOCKET"] = rpc_endpoint
         child_env["PYTHONDONTWRITEBYTECODE"] = "1"
         # Force UTF-8 for the child's stdio and default file encoding.

@@ -238,6 +238,23 @@ FOOTGUNS: list[Footgun] = [
         ),
     ),
     Footgun(
+        name="CREATE_NEW_CONSOLE with capture_output or PIPE",
+        pattern=re.compile(r"CREATE_NEW_CONSOLE"),
+        message=(
+            "subprocess.CREATE_NEW_CONSOLE allocates a new console window for "
+            "the child process. When combined with capture_output=True or "
+            "stdout=PIPE / stderr=PIPE the captured handles may be empty "
+            "because the child's I/O is attached to the new console, not the "
+            "parent's pipes. For headless/background child processes on "
+            "Windows use CREATE_NO_WINDOW (0x08000000) instead."
+        ),
+        fix=(
+            "Replace CREATE_NEW_CONSOLE with CREATE_NO_WINDOW:\n"
+            "    _CREATE_NO_WINDOW = 0x08000000\n"
+            "    creationflags = _CREATE_NO_WINDOW if sys.platform == 'win32' else 0"
+        ),
+    ),
+    Footgun(
         name="bare signal.SIGKILL",
         pattern=re.compile(r"\bsignal\.SIGKILL\b"),
         message=(

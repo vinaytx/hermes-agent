@@ -868,6 +868,7 @@ def skill_view(
     Returns:
         JSON string with skill content or error message
     """
+    logger.debug("skill_view: name=%r file_path=%r task_id=%s preprocess=%s", name, file_path, task_id, preprocess)
     try:
         local_category_name: str | None = None
         # ── Qualified name dispatch (plugin skills) ──────────────────
@@ -1034,6 +1035,7 @@ def skill_view(
 
         if candidates:
             skill_dir, skill_md = candidates[0]
+            logger.debug("skill_view: resolved %r -> %s (%d candidate(s))", name, skill_md, len(candidates))
 
         if not skill_md or not skill_md.exists():
             available = [s["name"] for s in _sort_skills(_find_all_skills())[:20]]
@@ -1322,6 +1324,13 @@ def skill_view(
             env_snapshot=env_snapshot,
         )
         setup_needed = bool(remaining_missing_required_envs)
+        logger.debug(
+            "skill_view: %r readiness=%s setup_needed=%s missing_env=%s",
+            skill_name,
+            SkillReadinessStatus.SETUP_NEEDED.value if setup_needed else SkillReadinessStatus.AVAILABLE.value,
+            setup_needed,
+            remaining_missing_required_envs,
+        )
 
         # Register available skill env vars so they pass through to sandboxed
         # execution environments (execute_code, terminal).  Only vars that are
@@ -1366,6 +1375,7 @@ def skill_view(
 
         rendered_content = content
         if preprocess:
+            logger.debug("skill_view: preprocessing content for %r", skill_name)
             try:
                 from agent.skill_preprocessing import preprocess_skill_content
 

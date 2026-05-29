@@ -7497,6 +7497,9 @@ class GatewayRunner:
         if canonical == "yolo":
             return await self._handle_yolo_command(event)
 
+        if canonical == "trace":
+            return await self._handle_trace_command(event)
+
         if canonical == "model":
             return await self._handle_model_command(event)
 
@@ -12006,6 +12009,61 @@ class GatewayRunner:
         else:
             enable_session_yolo(session_key)
             return EphemeralReply(t("gateway.yolo.enabled"))
+
+    async def _handle_trace_command(self, event: MessageEvent) -> str:
+        """Handle /trace — toggle call-flow tracing for this session.
+
+        Usage:
+            /trace              Show current tracing status
+            /trace on           Enable tracing  (sets HERMES_TRACE=1)
+            /trace off          Disable tracing (clears HERMES_TRACE)
+            /trace system on    Also log system prompt in LLM send blocks
+            /trace system off   Suppress system prompt in LLM send blocks (default)
+        """
+        import os
+        from datetime import datetime
+
+        parts = event.text.strip().split() if event.text else []
+        sub = parts[1].lower() if len(parts) > 1 else "status"
+        sub2 = parts[2].lower() if len(parts) > 2 else ""
+
+        trace_on = os.environ.get("HERMES_TRACE", "").strip() not in ("", "0", "false", "no")
+        sys_on = os.environ.get("HERMES_TRACE_SYSTEM_PROMPT", "").strip() not in ("", "0", "false", "no")
+
+        if sub in ("on", "1", "enable"):
+            os.environ["HERMES_TRACE"] = "1"
+            log_path = _hermes_home / "logs" / f"trace_{datetime.now().strftime('%Y-%m-%d')}.log"
+            return f"Tracing ON — writing to {log_path}"
+
+        elif sub in ("off", "0", "disable"):
+            os.environ.pop("HERMES_TRACE", None)
+            return "Tracing OFF"
+
+        elif sub == "system":
+            if sub2 in ("on", "1", "enable"):
+                os.environ["HERMES_TRACE_SYSTEM_PROMPT"] = "1"
+                return "System prompt in trace: ON — expanded in each LLM send block"
+            elif sub2 in ("off", "0", "disable"):
+                os.environ.pop("HERMES_TRACE_SYSTEM_PROMPT", None)
+                return "System prompt in trace: OFF — summary line only"
+            else:
+                if sys_on:
+                    os.environ.pop("HERMES_TRACE_SYSTEM_PROMPT", None)
+                    return "System prompt in trace: OFF — summary line only"
+                else:
+                    os.environ["HERMES_TRACE_SYSTEM_PROMPT"] = "1"
+                    return "System prompt in trace: ON — expanded in each LLM send block"
+
+        else:  # status
+            trace_state = "ON" if trace_on else "OFF"
+            sys_state = "ON" if sys_on else "OFF (summary only)"
+            log_path = _hermes_home / "logs" / f"trace_{datetime.now().strftime('%Y-%m-%d')}.log"
+            return (
+                f"Tracing: {trace_state}\n"
+                f"System prompt: {sys_state}\n"
+                f"Log file: {log_path}\n\n"
+                f"Commands: /trace on|off  |  /trace system on|off"
+            )
 
     async def _handle_verbose_command(self, event: MessageEvent) -> str:
         """Handle /verbose command — cycle tool progress display mode.

@@ -139,7 +139,7 @@ COMMAND_REGISTRY: list[CommandDef] = [
                "Configuration", args_hint="[on|off|status]",
                subcommands=("on", "off", "status")),
     CommandDef("trace", "Toggle call-flow tracing to ~/.hermes/logs/trace_YYYY-MM-DD.log",
-               "Configuration", cli_only=True, args_hint="[on|off|system on|off|status]",
+               "Configuration", args_hint="[on|off|system on|off|status]",
                subcommands=("on", "off", "status", "system")),
     CommandDef("yolo", "Toggle YOLO mode (skip all dangerous command approvals)",
                "Configuration"),

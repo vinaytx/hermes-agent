@@ -56,6 +56,8 @@ def _load_skill_payload(skill_identifier: str, task_id: str | None = None) -> tu
     if not raw_identifier:
         return None
 
+    logger.debug("_load_skill_payload: loading %r (task_id=%s)", raw_identifier, task_id)
+
     try:
         from tools.skills_tool import SKILLS_DIR, skill_view
         from agent.skill_utils import get_external_skills_dirs
@@ -97,6 +99,7 @@ def _load_skill_payload(skill_identifier: str, task_id: str | None = None) -> tu
         return None
 
     if not loaded_skill.get("success"):
+        logger.debug("_load_skill_payload: skill_view failed for %r: %s", raw_identifier, loaded_skill.get("error"))
         return None
 
     skill_name = str(loaded_skill.get("name") or normalized)
@@ -115,6 +118,7 @@ def _load_skill_payload(skill_identifier: str, task_id: str | None = None) -> tu
         except Exception:
             skill_dir = None
 
+    logger.debug("_load_skill_payload: resolved %r -> name=%r dir=%s", raw_identifier, skill_name, skill_dir)
     return loaded_skill, skill_dir, skill_name
 
 
@@ -168,6 +172,9 @@ def _build_skill_message(
     """Format a loaded skill into a user/system message payload."""
     from tools.skills_tool import SKILLS_DIR
 
+    skill_name_for_log = loaded_skill.get("name") or "(unknown)"
+    logger.debug("_build_skill_message: building message for skill=%r dir=%s", skill_name_for_log, skill_dir)
+
     content = str(loaded_skill.get("content") or "")
 
     # ── Template substitution and inline-shell expansion ──
@@ -175,9 +182,11 @@ def _build_skill_message(
     # supporting-file hints) see the expanded content.
     skills_cfg = _load_skills_config()
     if skills_cfg.get("template_vars", True):
+        logger.debug("_build_skill_message: applying template var substitution for %r", skill_name_for_log)
         content = _substitute_template_vars(content, skill_dir, session_id)
     if skills_cfg.get("inline_shell", False):
         timeout = int(skills_cfg.get("inline_shell_timeout", 10) or 10)
+        logger.debug("_build_skill_message: expanding inline shell snippets for %r (timeout=%ds)", skill_name_for_log, timeout)
         content = _expand_inline_shell(content, skill_dir, timeout)
 
     parts = [activation_note, "", content.strip()]
@@ -233,6 +242,9 @@ def _build_skill_message(
                         rel = str(f.relative_to(skill_dir))
                         supporting.append(rel)
 
+    if supporting:
+        logger.debug("_build_skill_message: %d supporting file(s) found for %r", len(supporting), skill_name_for_log)
+
     if supporting and skill_dir:
         try:
             skill_view_target = str(skill_dir.relative_to(SKILLS_DIR))
@@ -257,7 +269,9 @@ def _build_skill_message(
         parts.append("")
         parts.append(f"[Runtime note: {runtime_note}]")
 
-    return "\n".join(parts)
+    message = "\n".join(parts)
+    logger.debug("_build_skill_message: assembled %d-char message for %r", len(message), skill_name_for_log)
+    return message
 
 
 def scan_skill_commands() -> Dict[str, Dict[str, Any]]:
@@ -269,6 +283,7 @@ def scan_skill_commands() -> Dict[str, Dict[str, Any]]:
     global _skill_commands, _skill_commands_platform
     _skill_commands_platform = _resolve_skill_commands_platform()
     _skill_commands = {}
+    logger.debug("scan_skill_commands: starting scan (platform=%s)", _skill_commands_platform)
     try:
         from tools.skills_tool import SKILLS_DIR, _parse_frontmatter, skill_matches_platform, _get_disabled_skill_names
         from agent.skill_utils import get_external_skills_dirs, iter_skill_index_files
@@ -282,6 +297,7 @@ def scan_skill_commands() -> Dict[str, Dict[str, Any]]:
         dirs_to_scan.extend(get_external_skills_dirs())
 
         for scan_dir in dirs_to_scan:
+            logger.debug("scan_skill_commands: scanning dir %s", scan_dir)
             for skill_md in iter_skill_index_files(scan_dir, "SKILL.md"):
                 if any(part in {'.git', '.github', '.hub', '.archive'} for part in skill_md.parts):
                     continue
@@ -323,6 +339,7 @@ def scan_skill_commands() -> Dict[str, Dict[str, Any]]:
                     continue
     except Exception:
         pass
+    logger.debug("scan_skill_commands: found %d skill command(s)", len(_skill_commands))
     return _skill_commands
 
 
@@ -440,16 +457,20 @@ def build_skill_invocation_message(
     Returns:
         The formatted message string, or None if the skill wasn't found.
     """
+    logger.debug("build_skill_invocation_message: cmd_key=%r instruction=%r", cmd_key, user_instruction or "")
     commands = get_skill_commands()
     skill_info = commands.get(cmd_key)
     if not skill_info:
+        logger.debug("build_skill_invocation_message: no skill registered for %r", cmd_key)
         return None
 
     loaded = _load_skill_payload(skill_info["skill_dir"], task_id=task_id)
     if not loaded:
+        logger.debug("build_skill_invocation_message: payload load failed for %r", cmd_key)
         return None
 
     loaded_skill, skill_dir, skill_name = loaded
+    logger.debug("build_skill_invocation_message: building message for skill=%r", skill_name)
 
     # Track active usage for Curator lifecycle management (#17782)
     try:
@@ -480,6 +501,7 @@ def build_preloaded_skills_prompt(
 
     Returns (prompt_text, loaded_skill_names, missing_identifiers).
     """
+    logger.debug("build_preloaded_skills_prompt: preloading %d skill(s): %s", len(skill_identifiers), skill_identifiers)
     prompt_parts: list[str] = []
     loaded_names: list[str] = []
     missing: list[str] = []
@@ -520,4 +542,5 @@ def build_preloaded_skills_prompt(
         )
         loaded_names.append(skill_name)
 
+    logger.debug("build_preloaded_skills_prompt: loaded=%s missing=%s", loaded_names, missing)
     return "\n\n".join(prompt_parts), loaded_names, missing

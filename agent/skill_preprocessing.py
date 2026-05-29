@@ -48,16 +48,26 @@ def substitute_template_vars(
         return content
 
     skill_dir_str = str(skill_dir) if skill_dir else None
+    substitution_count = 0
 
     def _replace(match: re.Match) -> str:
+        nonlocal substitution_count
         token = match.group(1)
         if token == "HERMES_SKILL_DIR" and skill_dir_str:
+            logger.debug("substitute_template_vars: replacing ${HERMES_SKILL_DIR} -> %s", skill_dir_str)
+            substitution_count += 1
             return skill_dir_str
         if token == "HERMES_SESSION_ID" and session_id:
+            logger.debug("substitute_template_vars: replacing ${HERMES_SESSION_ID} -> %s", session_id)
+            substitution_count += 1
             return str(session_id)
+        logger.debug("substitute_template_vars: leaving %s unresolved (no value available)", match.group(0))
         return match.group(0)
 
-    return _SKILL_TEMPLATE_RE.sub(_replace, content)
+    result = _SKILL_TEMPLATE_RE.sub(_replace, content)
+    if substitution_count:
+        logger.debug("substitute_template_vars: made %d substitution(s)", substitution_count)
+    return result
 
 
 def run_inline_shell(command: str, cwd: Path | None, timeout: int) -> str:
@@ -66,6 +76,7 @@ def run_inline_shell(command: str, cwd: Path | None, timeout: int) -> str:
     Failures return a short ``[inline-shell error: ...]`` marker instead of
     raising, so one bad snippet can't wreck the whole skill message.
     """
+    logger.debug("run_inline_shell: running %r (cwd=%s timeout=%ds)", command, cwd, timeout)
     try:
         completed = subprocess.run(
             ["bash", "-c", command],
@@ -76,8 +87,10 @@ def run_inline_shell(command: str, cwd: Path | None, timeout: int) -> str:
             check=False,
         )
     except subprocess.TimeoutExpired:
+        logger.debug("run_inline_shell: timeout after %ds for %r", timeout, command)
         return f"[inline-shell timeout after {timeout}s: {command}]"
     except FileNotFoundError:
+        logger.debug("run_inline_shell: bash not found")
         return "[inline-shell error: bash not found]"
     except RuntimeError as exc:
         # tests/conftest.py installs a live-system guard that blocks real
@@ -95,6 +108,7 @@ def run_inline_shell(command: str, cwd: Path | None, timeout: int) -> str:
         output = completed.stderr.rstrip("\n")
     if len(output) > _INLINE_SHELL_MAX_OUTPUT:
         output = output[:_INLINE_SHELL_MAX_OUTPUT] + "...[truncated]"
+    logger.debug("run_inline_shell: exit=%d output_len=%d for %r", completed.returncode, len(output), command)
     return output
 
 
@@ -110,6 +124,7 @@ def expand_inline_shell(
     """
     if "!`" not in content:
         return content
+    logger.debug("expand_inline_shell: found inline shell snippets, expanding (cwd=%s)", skill_dir)
 
     def _replace(match: re.Match) -> str:
         cmd = match.group(1).strip()
